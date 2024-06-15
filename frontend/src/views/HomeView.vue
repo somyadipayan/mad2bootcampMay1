@@ -1,4 +1,5 @@
 <template>
+  <NavBar />
   <div class="home">
     <img alt="Vue logo" src="../assets/logo.png">
     <HelloWorld msg="Welcome sdfed to Your Vue.js App"/>
@@ -6,13 +7,14 @@
 </template>
 
 <script>
-// @ is an alias to /src
+import NavBar from '@/components/NavBar.vue'
 import HelloWorld from '@/components/HelloWorld.vue'
 
 export default {
   name: 'HomeView',
   components: {
-    HelloWorld
+    HelloWorld,
+    NavBar
   }
 }
 </script>
