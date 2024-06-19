@@ -126,5 +126,107 @@ def get_userinfo():
     user_data = user_schema.dump(user)
     return jsonify(user_data), 200
 
+# CRUD ON CATEGORIES
+
+# Creating a Category
+@app.route("/category", methods= ["POST"])
+@jwt_required()
+def create_category():
+    this_user = get_jwt_identity()
+
+    if this_user["role"] == "user":
+        return {"error": "Unauthorized"}, 401
+    
+    data = request.json
+    name = data["name"]
+    if not name:
+        return {"error": "Name is required"}, 400
+    
+    creator_email = this_user["email"]
+    if this_user["role"] == "admin":
+        verified = True
+    else:
+        verified = False
+
+    existing = Category.query.filter_by(name=name).first()
+    if existing:
+        return {"error": "Category already exists"}, 409
+    new_category = Category(name, creator_email, verified)
+    try: 
+        db.session.add(new_category)
+        db.session.commit()
+        if this_user["role"] == "admin":
+            return {"message": "Category created successfully"}, 201
+        return {"message": "Category creation application Submitted Successfully"}, 201
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to create category: {str(e)}"}, 500
+
+# GET ALL CATEGORIES
+@app.route("/categories", methods= ["GET"])
+def get_categories():
+    categories = Category.query.all()
+    categories_data = categories_schema.dump(categories)
+    return jsonify(categories_data), 200
+
+# GET SINGLE CATEGORY by ID
+@app.route("/category/<int:id>", methods= ["GET"])
+def get_category(id):
+    category = Category.query.get(id)
+    if not category:
+        return {"error": "Category not found"}, 404
+    category_data = category_schema.dump(category)
+    return jsonify(category_data), 200
+
+# UPDATE CATEGORY
+@app.route("/category/<int:id>", methods= ["PUT"])
+@jwt_required()
+def update_category(id):
+    this_user = get_jwt_identity()
+
+    if this_user["role"] == "user":
+        return {"error": "Unauthorized"}, 401
+    
+    data = request.json
+    name = data["name"]
+    if not name:
+        return {"error": "Name is required"}, 400
+    category = Category.query.get(id)
+    if not category:
+        return {"error": "Category not found"}, 404
+    existing_category = Category.query.filter_by(name=name).first()
+
+    if existing_category:
+        return {"error": "Category already exists"}, 409
+    
+    category.name = name
+    try: 
+        db.session.commit()
+        return {"message": "Category updated successfully"}, 200
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to update category: {str(e)}"}, 500
+
+# DELETE CATEGORY by ID
+@app.route("/category/<int:id>", methods= ["DELETE"])
+@jwt_required()
+def delete_category(id):
+    this_user = get_jwt_identity()
+
+    if this_user["role"] != "admin":
+        return {"error": "Unauthorized"}, 401
+    
+    category = Category.query.get(id)
+    if not category:
+        return {"error": "Category not found"}, 404
+    
+    try:
+        db.session.delete(category)
+        db.session.commit()
+        return {"message": "Category deleted successfully"}, 200
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to delete category: {str(e)}"}, 500
+
 if __name__ == "__main__":
     app.run(debug=True)

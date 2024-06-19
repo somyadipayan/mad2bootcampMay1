@@ -1,5 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import Column, Integer, Text, DateTime
+from sqlalchemy import Column, Integer, Text, DateTime, Boolean
+from sqlalchemy.orm import relationship
 from flask_marshmallow import Marshmallow
 from marshmallow import fields
 from flask_bcrypt import Bcrypt
@@ -33,3 +34,48 @@ class UserSchema(ma.Schema):
 
 user_schema = UserSchema()
 users_schema = UserSchema(many=True)
+
+
+class Category(db.Model):
+    __tablename__ = 'category'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(Text, nullable=False)
+    creator_email = Column(Text, db.ForeignKey('user.email') ,nullable=False)
+    creator = relationship('User', backref='categories')
+    products = relationship('Product', back_populates='category', cascade= "all, delete-orphan")
+    verified = Column(Boolean, nullable=False)
+
+    def __init__(self, name, creator_email, verified):
+        self.name = name
+        self.creator_email = creator_email
+        self.verified = verified
+
+
+class Product(db.Model):
+    __tablename__ = 'product'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(Text, nullable=False)
+    unit = Column(Text, nullable=False)
+    rateperunit = Column(Integer, nullable=False)
+    quantity = Column(Integer, nullable=False)
+    category_id = Column(Integer, db.ForeignKey('category.id'), nullable=False)
+    category = relationship('Category', back_populates='products')
+    creator_email = Column(Text, db.ForeignKey('user.email') ,nullable=False)
+    creator = relationship('User', backref='products')
+
+    def __init__(self, name, unit, rateperunit, quantity, category_id, creator_email):
+        self.name = name
+        self.unit = unit
+        self.rateperunit = rateperunit
+        self.quantity = quantity
+        self.category_id = category_id
+        self.creator_email = creator_email
+
+class CategorySchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name', 'creator_email', 'verified')
+
+category_schema = CategorySchema()
+categories_schema = CategorySchema(many=True)
