@@ -100,6 +100,9 @@ def login():
         "role": user.role
     })
 
+    user.last_loggedin = datetime.now()
+    db.session.commit()
+
     return jsonify({"access_token": access_token, "message": "Login successful"}), 200
 
 # THIS ROUTE TO BE ACCESSIBLE ONLY BY LOGGED IN USERS
@@ -133,7 +136,7 @@ def get_userinfo():
 @jwt_required()
 def create_category():
     this_user = get_jwt_identity()
-
+    # Only for manager and admin
     if this_user["role"] == "user":
         return {"error": "Unauthorized"}, 401
     
@@ -148,8 +151,8 @@ def create_category():
     else:
         verified = False
 
-    existing = Category.query.filter_by(name=name).first()
-    if existing:
+    existing_category = Category.query.filter_by(name=name).first()
+    if existing_category:
         return {"error": "Category already exists"}, 409
     new_category = Category(name, creator_email, verified)
     try: 
@@ -172,7 +175,7 @@ def get_categories():
 # GET SINGLE CATEGORY by ID
 @app.route("/category/<int:id>", methods= ["GET"])
 def get_category(id):
-    category = Category.query.get(id)
+    category = Category.query.filter_by(id=id).first() 
     if not category:
         return {"error": "Category not found"}, 404
     category_data = category_schema.dump(category)
@@ -196,7 +199,7 @@ def update_category(id):
         return {"error": "Category not found"}, 404
     existing_category = Category.query.filter_by(name=name).first()
 
-    if existing_category:
+    if existing_category and existing_category.id != id:
         return {"error": "Category already exists"}, 409
     
     category.name = name

@@ -8,6 +8,8 @@
                 <tr>
                     <th>ID</th>
                     <th>Name</th>
+                    <th v-if="this.role==='admin'">Created By</th>
+                    <th>Status</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -15,9 +17,16 @@
                 <tr v-for="category in categories" :key="category.id">
                     <td>{{ category.id }}</td>
                     <td>{{ category.name }}</td>
+                    <td v-if="this.role==='admin'">{{ category.creator_email }}</td>
+                    <td  v-if="this.role==='admin'">
+                    <button v-if="!category.verified" class="btn btn-light" @click="verifyCategory(category.id)">Verify</button>
+                    <button v-else class="btn btn-light" disabled>Verified</button>
+                    </td>
                     <td class="btn-group">
                         <button @click="viewCategory(category.id)" class="btn btn-light">View</button>
                         <router-link v-if="this.role==='admin'||this.role==='manager'" :to="{ name: 'update-category', params: { id: category.id } }" class="btn btn-light">Update</router-link>
+                        <!-- Below is an alternative to above -->
+                        <!-- <router-link v-if="this.role==='admin'||this.role==='manager'" :to="`/update-category/${category.id}`" class="btn btn-light">Update</router-link> -->
                         <button v-if="this.role==='admin'" @click="deleteCategory(category.id)" class="btn btn-light">Delete</button>
                     </td>
                 </tr>

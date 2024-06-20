@@ -57,8 +57,8 @@ class Product(db.Model):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(Text, nullable=False)
-    unit = Column(Text, nullable=False)
-    rateperunit = Column(Integer, nullable=False)
+    unit = Column(Text, nullable=False) # KG, Piece, Litres
+    rateperunit = Column(Integer, nullable=False) 
     quantity = Column(Integer, nullable=False)
     category_id = Column(Integer, db.ForeignKey('category.id'), nullable=False)
     category = relationship('Category', back_populates='products')
