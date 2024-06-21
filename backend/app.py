@@ -231,5 +231,234 @@ def delete_category(id):
         db.session.rollback()
         return {"error": f"Failed to delete category: {str(e)}"}, 500
 
+# CRUD ON PRODUCTS
+@app.route("/category/<int:id>/product", methods= ["POST"])
+@jwt_required()
+def create_product(id):
+    this_user = get_jwt_identity()
+
+    if this_user["role"] == "user":
+        return {"error": "Unauthorized"}, 401
+    
+    data = request.json
+    name = data["name"]
+    unit = data["unit"]
+    rateperunit = data["rateperunit"]
+    quantity = data["quantity"]
+
+    if not name or not unit or not rateperunit or not quantity:
+        return {"error": "All fields are required"}, 400
+    
+    category = Category.query.get(id)
+    if not category:
+        return {"error": "Category not found"}, 404
+
+    new_product = Product(
+        name=name, 
+        category_id=category.id,
+        unit = unit,
+        rateperunit= rateperunit,
+        quantity = quantity,
+        creator_email = this_user["email"])
+    
+    try: 
+        db.session.add(new_product)
+        db.session.commit()
+        return {"message": "Product created successfully"}, 201
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to create product: {str(e)}"}, 500
+
+# GET ALL PRODUCTS
+@app.route("/products", methods= ["GET"])
+def get_all_products():
+    products = Product.query.all()
+    products_data = products_schema.dump(products)
+    return jsonify(products_data), 200
+
+# GET SINGLE PRODUCT by ID
+@app.route("/product/<int:id>", methods= ["GET"])
+def get_product(id):
+    product = Product.query.filter_by(id=id).first() 
+    if not product:
+        return {"error": "Product not found"}, 404
+    product_data = product_schema.dump(product)
+    return jsonify(product_data), 200
+
+# UPDATE PRODUCT
+@app.route("/product/<int:id>", methods= ["PUT"])
+@jwt_required()
+def update_product(id):
+    this_user = get_jwt_identity()
+
+    if this_user["role"] == "user":
+        return {"error": "Unauthorized"}, 401
+    
+    data = request.json
+    name = data["name"]
+    unit = data["unit"]
+    rateperunit = data["rateperunit"]
+    quantity = data["quantity"]
+    category_id = data["category_id"]
+
+    if not name or not unit or not rateperunit or not quantity or not category_id:
+        return {"error": "All fields are required"}, 400
+    
+    product = Product.query.get(id)
+    if not product:
+        return {"error": "Product not found"}, 404
+    
+    product.name = name
+    product.unit = unit
+    product.rateperunit = rateperunit
+    product.quantity = quantity
+    product.category_id = category_id
+    try: 
+        db.session.commit()
+        return {"message": "Product updated successfully"}, 200
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to update product: {str(e)}"}, 500
+
+# DELETE PRODUCT by ID
+@app.route("/product/<int:id>", methods= ["DELETE"])
+@jwt_required()
+def delete_product(id):
+    this_user = get_jwt_identity()
+
+    if this_user["role"] == "user":
+        return {"error": "Unauthorized"}, 401
+    
+    product = Product.query.get(id)
+    if not product:
+        return {"error": "Product not found"}, 404
+    
+    try:
+        db.session.delete(product)
+        db.session.commit()
+        return {"message": "Product deleted successfully"}, 200
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to delete product: {str(e)}"}, 500
+
+@app.route("/add-to-cart", methods=["POST"])
+@jwt_required()
+def add_to_cart():
+    current_user = get_jwt_identity()
+    if current_user["role"] != "user":
+        return {"message": "Unauthorized"}, 401
+    data = request.json
+    product_id = data["product_id"]
+    quantity = request.json.get("quantity", 1)
+
+    if quantity < 1:
+        return {"error": "Quantity must be greater than 0"}, 400
+
+    product = Product.query.get(product_id)
+    if not product:
+        return {"error": "Product not found"}, 404
+
+    if quantity > product.quantity:
+        return {"error": "Insufficient stock"}, 400
+
+    user_cart = ShoppingCart.query.filter_by(user_email=current_user["email"]).first()
+    if not user_cart:
+        user_cart = ShoppingCart(user_email=current_user["email"])
+        try:
+            db.session.add(user_cart)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return {"error": f"Failed to create cart: {str(e)}"}, 500
+
+    cart_item = CartItems.query.filter_by(shoppingcart_id=user_cart.id, product_id=product_id).first()
+
+    if cart_item:
+        cart_item.quantity += quantity
+    else:
+        cart_item = CartItems(shoppingcart_id=user_cart.id, product_id=product_id, quantity=quantity)
+    try:
+        db.session.add(cart_item)
+        db.session.commit()
+        return {"message": "Product added to cart successfully"}, 200
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to add product to cart: {str(e)}"}, 500
+
+@app.route("/view-cart", methods=["GET"])
+@jwt_required()
+def view_cart():
+    current_user = get_jwt_identity()
+    if current_user["role"] != "user":
+        return {"error": "Unauthorized"}, 401
+    user_cart = ShoppingCart.query.filter_by(user_email=current_user["email"]).first()
+    if not user_cart:
+        return {"message": "Cart is Empty"}, 200
+    cart_items = CartItems.query.filter_by(shoppingcart_id=user_cart.id).all()
+    cart_items_data = []
+    for item in cart_items:
+        cart_items_data.append({
+            'cart_id': item.id,
+            'product_id': item.product_id,
+            'quantity': item.quantity,
+            'product_name': item.product.name,
+            'product_unit': item.product.unit,
+            'product_rateperunit': item.product.rateperunit,
+            'total_price': item.product.rateperunit * item.quantity
+        })
+    return jsonify({"cart": cart_items_data}), 200
+
+# UPDATE AND DELETE CART 
+
+# ORDERS
+
+@app.route("/place-order", methods=["POST"])
+@jwt_required()
+def place_order():
+    current_user = get_jwt_identity() 
+    user_cart = ShoppingCart.query.filter_by(user_email=current_user["email"]).first()
+    if not user_cart or not user_cart.items:
+        return {"message": "Cart is Empty"}, 200
+    
+    total_amount = 0
+    order_items = []
+
+    for item in user_cart.items:
+        if item.quantity > item.product.quantity:
+            return {"error": "Insufficient stock"}, 400
+        total_amount += item.product.rateperunit * item.quantity
+        order_item = OrderItems(
+            product_id = item.product_id,
+            quantity = item.quantity
+                                )
+        order_items.append(order_item)
+        product = Product.query.filter_by(id=item.product_id).first()
+        product.quantity -= item.quantity
+
+    new_order = Order(
+        user_email = current_user["email"],
+        total_amount = total_amount,
+        order_date = datetime.now()
+    )
+
+    new_order.items = order_items
+
+    try:
+        db.session.add(new_order)
+        db.session.delete(user_cart)
+        db.session.commit()
+        return {"message": "Order placed successfully"}, 200
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to place order: {str(e)}"}, 500
+        
+
+    
+
+
+
+
+
+  
 if __name__ == "__main__":
     app.run(debug=True)

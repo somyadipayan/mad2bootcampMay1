@@ -64,6 +64,8 @@ class Product(db.Model):
     category = relationship('Category', back_populates='products')
     creator_email = Column(Text, db.ForeignKey('user.email') ,nullable=False)
     creator = relationship('User', backref='products')
+    shoppingcarts = relationship('CartItems', back_populates='product', cascade= "all, delete-orphan")
+    orders = relationship('OrderItems', back_populates='product', cascade= "all, delete-orphan")
 
     def __init__(self, name, unit, rateperunit, quantity, category_id, creator_email):
         self.name = name
@@ -79,3 +81,48 @@ class CategorySchema(ma.Schema):
 
 category_schema = CategorySchema()
 categories_schema = CategorySchema(many=True)
+
+class ProductSchema(ma.Schema):
+    class Meta:
+        fields = ('id', 'name', 'unit', 'rateperunit', 'quantity', 'category_id', 'creator_email')
+
+product_schema = ProductSchema()
+products_schema = ProductSchema(many=True)
+
+class ShoppingCart(db.Model):
+    __tablename__ = 'shoppingcart'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_email = Column(Text, db.ForeignKey('user.email') ,nullable=False)
+    user = relationship('User', backref='shoppingcart')
+    items = relationship('CartItems', back_populates='shoppingcart', cascade= "all, delete-orphan")
+
+class CartItems(db.Model):
+    __tablename__ = 'cartitem'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    product_id = Column(Integer, db.ForeignKey('product.id'), nullable=False)
+    shoppingcart_id = Column(Integer, db.ForeignKey('shoppingcart.id'), nullable=False)
+    shoppingcart = relationship('ShoppingCart', back_populates='items')
+    product = relationship('Product', back_populates='shoppingcarts')
+    quantity = Column(Integer, nullable=False)
+
+class Order(db.Model):
+    __tablename__ = 'order'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_email = Column(Text, db.ForeignKey('user.email') ,nullable=False)
+    user = relationship('User', backref='orders')
+    items = relationship('OrderItems', back_populates='order', cascade= "all, delete-orphan")
+    total_amount = Column(Integer, nullable=False)
+    order_date = Column(DateTime, nullable=False)
+
+class OrderItems(db.Model):
+    __tablename__ = 'orderitem'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    product_id = Column(Integer, db.ForeignKey('product.id'), nullable=False)
+    order_id = Column(Integer, db.ForeignKey('order.id'), nullable=False)
+    order = relationship('Order', back_populates='items')
+    product = relationship('Product', back_populates='orders')
+    quantity = Column(Integer, nullable=False)
