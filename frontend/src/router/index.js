@@ -5,12 +5,19 @@ import LoginPage from '@/views/LoginPage.vue'
 import CreateCategory from '@/views/CreateCategory.vue'
 import UpdateCategory from '@/views/UpdateCategory.vue'
 import AllCategories from '@/views/AllCategories.vue'
+import ViewCart from '@/views/ViewCart.vue'
+import AdminReport from '@/views/AdminReport.vue'
 
 const routes = [
   {
     path: '/',
     name: 'home',
     component: HomeView
+  },
+  {
+    path: '/admin-report',
+    name: 'admin-report',
+    component: AdminReport
   },
   {
     path: '/register',
@@ -36,6 +43,21 @@ const routes = [
     path: '/all-categories',
     name: 'all-categories',
     component: AllCategories
+  },
+  {
+    path: '/view-cart',
+    name: 'view-cart',
+    component: ViewCart
+  },
+  {
+    path: '/test',
+    name: 'test',
+    component: () => import('../views/ImageTest.vue')
+  },
+  {
+    path: '/test2',
+    name: 'test2',
+    component: () => import('../views/ImageGallery.vue')
   },
   {
     path: '/about',

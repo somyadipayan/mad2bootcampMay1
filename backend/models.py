@@ -126,3 +126,9 @@ class OrderItems(db.Model):
     order = relationship('Order', back_populates='items')
     product = relationship('Product', back_populates='orders')
     quantity = Column(Integer, nullable=False)
+
+
+class Image(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(120), nullable=False)
+

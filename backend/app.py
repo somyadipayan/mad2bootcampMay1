@@ -1,20 +1,36 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, send_file
 from config import Config
 from models import *
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_cors import CORS
 from flask_jwt_extended import create_access_token, get_jwt_identity, jwt_required, JWTManager, unset_jwt_cookies
-
+from werkzeug.utils import secure_filename
+import os
+import io
+import matplotlib.pyplot as plt
+import workers, task
+from flask_mail import Mail
 
 app = Flask(__name__)
 app.config.from_object(Config)
 
+celery = workers.celery
+celery.conf.update(
+    broker_url=app.config['CELERY_BROKER_URL'],
+    result_backend=app.config['CELERY_RESULT_BACKEND']
+)
+
+celery.Task = workers.ContextTask
+app.app_context().push()
 jwt = JWTManager(app)
+mail = Mail(app)
 db.init_app(app)
 ma.init_app(app)
 bcrypt.init_app(app)
 
 with app.app_context():
+    if not os.path.exists(app.config['UPLOAD_FOLDER']):
+        os.makedirs(app.config['UPLOAD_FOLDER'])
     db.create_all()
 
 CORS(app, supports_credentials=True)
@@ -48,6 +64,9 @@ def create_admin():
 
 @app.route("/", methods= ["GET"])
 def home():
+    # triggering task "multiply" from task.py
+    task.multiply.delay(3, 4)
+    task.add.delay()
     return "Hello World"
 
 @app.route("/register", methods= ["POST"])
@@ -408,8 +427,81 @@ def view_cart():
         })
     return jsonify({"cart": cart_items_data}), 200
 
-# UPDATE AND DELETE CART 
+@app.route("/update-cart", methods=["PUT"])
+@jwt_required()
+def update_cart():
+    current_user = get_jwt_identity()
+    if current_user["role"] != "user":
+        return {"error": "Unauthorized"}, 401
+    
+    data = request.json
+    cart_item_id = data.get("cart_item_id")
+    new_quantity = data.get("quantity")
 
+    if new_quantity < 1:
+        return {"error": "Quantity must be greater than 0"}, 400
+    
+    cart_item = CartItems.query.filter_by(id=cart_item_id).first()
+    if not cart_item:
+        return {"error": "Cart item not found"}, 404
+    
+    user_cart = ShoppingCart.query.filter_by(id=cart_item.shoppingcart_id, user_email=current_user["email"]).first()
+    if not user_cart:
+        return {"error": "Unauthorized to update this cart item"}, 401
+    
+    if new_quantity > cart_item.product.quantity:
+        return {"error": "Insufficient stock"}, 400
+    
+    cart_item.quantity = new_quantity
+
+    try:
+        db.session.commit()
+        return {"message": "Cart item updated successfully"}, 200
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to update cart item: {str(e)}"}, 500
+
+@app.route("/delete-from-cart/<int:cart_item_id>", methods=["DELETE"])
+@jwt_required()
+def delete_from_cart(cart_item_id):
+    current_user = get_jwt_identity()
+    if current_user["role"] != "user":
+        return {"error": "Unauthorized"}, 401
+
+    cart_item = CartItems.query.filter_by(id=cart_item_id).first()
+    if not cart_item:
+        return {"error": "Cart item not found"}, 404
+    
+    user_cart = ShoppingCart.query.filter_by(id=cart_item.shoppingcart_id, user_email=current_user["email"]).first()
+    if not user_cart:
+        return {"error": "Unauthorized to delete this cart item"}, 401
+    
+    try:
+        db.session.delete(cart_item)
+        db.session.commit()
+        return {"message": "Cart item deleted successfully"}, 200
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to delete cart item: {str(e)}"}, 500
+
+
+@app.route('/verify-category/<int:id>', methods=['POST'])
+@jwt_required()
+def verify_category(id):
+    current_user = get_jwt_identity()
+    if current_user["role"] != "admin":
+        return {"error": "Unauthorized"}, 401
+    category = Category.query.get(id)
+    if not category:
+        return {"error": "Category not found"}, 404
+    category.verified = True
+    try:
+        db.session.commit()
+        return {"message": "Category verified successfully"}, 200
+    except Exception as e:
+        db.session.rollback()
+        return {"error": f"Failed to verify category: {str(e)}"}, 500
+    
 # ORDERS
 
 @app.route("/place-order", methods=["POST"])
@@ -447,18 +539,130 @@ def place_order():
         db.session.add(new_order)
         db.session.delete(user_cart)
         db.session.commit()
+        task.order_successful_mail.delay(new_order.id)
         return {"message": "Order placed successfully"}, 200
     except Exception as e:
         db.session.rollback()
         return {"error": f"Failed to place order: {str(e)}"}, 500
         
+# FOR TESTING PURPOSE
+# IGNORE BELOW CODE
 
-    
+@app.route('/upload-image', methods=['POST'])
+def upload_image():
+    if 'image' not in request.files:
+        return {"error": "No image part"}, 400
+    file = request.files['image']
+    if file.filename == '':
+        return {"error": "No selected file"}, 400
+    if file:
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+        new_image = Image(filename=filename)
+        db.session.add(new_image)
+        db.session.commit()
+        return {"message": "Image uploaded successfully"}, 201
 
+@app.route('/images', methods=['GET'])
+def get_images():
+    images = Image.query.all()
+    images_data = []
+    for image in images:
+        images_data.append({
+            'id': image.id,
+            'filename': image.filename
+        })
+    return images_data, 200
 
+@app.route('/images/<filename>', methods=['GET'])
+def get_image(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+#TESTING ENDS HERE
 
+@app.route("/getallproductinfo", methods=["GET"])
+def getallproductinfo():
+    categories = Category.query.all()
+    data = []
 
+    for category in categories:
+        data.append({
+            "id": category.id,
+            "name": category.name,
+            "products": products_schema.dump(category.products)
+        })
+    return jsonify(data), 200       
+@app.route('/order-history-report', methods=['GET'])
+def order_history_report():
+    now = datetime.now()
+    start_date = datetime(now.year, now.month, 1)
+    end_date = datetime(now.year, now.month + 1, 1) - timedelta(days=1) if now.month != 12 else datetime(now.year + 1, 1, 1) - timedelta(days=1)
 
-  
+    # start_date = now - timedelta(days=30)
+    # end_date = now
+
+    orders = Order.query.filter(Order.order_date.between(start_date, end_date)).all()
+
+    total_orders = len(orders)
+    total_amount = sum(order.total_amount for order in orders)
+    total_items = sum(item.quantity for order in orders for item in order.items)
+
+    order_dates = [order.order_date.strftime('%Y-%m-%d') for order in orders]
+    order_counts = {date: order_dates.count(date) for date in set(order_dates)}
+
+    plt.figure(figsize=(10, 6))
+    plt.bar(order_counts.keys(), order_counts.values())
+    plt.xlabel('Date')
+    plt.ylabel('Number of Orders')
+    plt.title('Number of Orders per Day')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+
+    img = io.BytesIO()
+    plt.savefig(img, format='png')
+    img.seek(0)
+
+    response = {
+        'total_orders': total_orders,
+        'total_amount': total_amount,
+        'total_items': total_items,
+    }
+
+    return jsonify(response)
+
+@app.route('/order-history-report-graph', methods=['GET'])
+def order_history_report_graph():
+    img = io.BytesIO()
+    plt.savefig(img, format='png')
+    img.seek(0)
+    return send_file(img, mimetype='image/png')
+
+@app.route('/order-category-pie-chart', methods=['GET'])
+def order_category_pie_chart():
+    now = datetime.now()
+    start_date = datetime(now.year, now.month, 1)
+    end_date = datetime(now.year, now.month + 1, 1) - timedelta(days=1) if now.month != 12 else datetime(now.year + 1, 1, 1) - timedelta(days=1)
+
+    orders = Order.query.filter(Order.order_date.between(start_date, end_date)).all()
+
+    category_counts = {}
+    for order in orders:
+        for item in order.items:
+            category_name = item.product.category.name
+            if category_name not in category_counts:
+                category_counts[category_name] = 0
+            category_counts[category_name] += item.quantity
+
+    plt.figure(figsize=(10, 6))
+    plt.pie(category_counts.values(), labels=category_counts.keys(), autopct='%1.1f%%', startangle=140)
+    plt.axis('equal')
+    plt.title('Orders from Different Categories')
+
+    img = io.BytesIO()
+    plt.savefig(img, format='png')
+    img.seek(0)
+
+    return send_file(img, mimetype='image/png')
+
 if __name__ == "__main__":
     app.run(debug=True)
