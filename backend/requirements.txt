@@ -1,9 +1,9 @@
-Flask
-Flask-CORS
-Flask-Mail
-Flask-SQLAlchemy
-Flask-Marshmallow
-Flask-Bcrypt
-SQLAlchemy
-marshmallow
-celery
+    Flask
+    Flask-CORS
+    Flask-Mail
+    Flask-SQLAlchemy
+    Flask-Marshmallow
+    Flask-Bcrypt
+    SQLAlchemy
+    marshmallow
+    celery

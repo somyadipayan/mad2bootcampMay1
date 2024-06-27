@@ -10,6 +10,7 @@ import io
 import matplotlib.pyplot as plt
 import workers, task
 from flask_mail import Mail
+from flask_caching import Cache
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -24,6 +25,7 @@ celery.Task = workers.ContextTask
 app.app_context().push()
 jwt = JWTManager(app)
 mail = Mail(app)
+cache = Cache(app)
 db.init_app(app)
 ma.init_app(app)
 bcrypt.init_app(app)
@@ -64,9 +66,6 @@ def create_admin():
 
 @app.route("/", methods= ["GET"])
 def home():
-    # triggering task "multiply" from task.py
-    task.multiply.delay(3, 4)
-    task.add.delay()
     return "Hello World"
 
 @app.route("/register", methods= ["POST"])
@@ -581,6 +580,7 @@ def get_image(filename):
 #TESTING ENDS HERE
 
 @app.route("/getallproductinfo", methods=["GET"])
+@cache.cached(timeout=60)
 def getallproductinfo():
     categories = Category.query.all()
     data = []
@@ -663,6 +663,25 @@ def order_category_pie_chart():
     img.seek(0)
 
     return send_file(img, mimetype='image/png')
+
+from flask import Response
+from io import StringIO
+import csv
+def generate_order_csv():
+    orders = Order.query.all()
+    csv_buffer = StringIO()
+    csv_writer = csv.writer(csv_buffer)
+    csv_writer.writerow(['Order ID', 'User Email', 'Order Date', 'Total Amount'])
+    for order in orders:
+        csv_writer.writerow([order.id, order.user_email, order.order_date, order.total_amount])
+
+    return csv_buffer.getvalue()
+
+@app.route('/download-order-csv', methods=['GET'])
+@cache.cached(timeout=600)
+def download_order_csv():
+    csv_data = generate_order_csv()
+    return Response(csv_data, mimetype='text/csv', headers={'Content-Disposition': 'attachment;filename=orders.csv'})
 
 if __name__ == "__main__":
     app.run(debug=True)

@@ -24,6 +24,7 @@
                             class="img-fluid">
                     </div>
                 </div>
+                <a href="http://localhost:5000/download-order-csv" class="btn btn-primary mt-4">Download CSV</a>
             </div>
         </div>
     </div>
